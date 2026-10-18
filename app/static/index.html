@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Expenses</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 680px; margin: 48px auto; padding: 0 16px; color: #1a1a1a; }
+    form { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    input { padding: 8px 10px; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
+    #amount { width: 110px; } #category { width: 130px; } #note { flex: 1; min-width: 140px; }
+    button { padding: 8px 14px; font-size: 1rem; border: 0; border-radius: 6px; background: #222; color: #fff; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; } td, th { text-align: left; padding: 7px 4px; border-bottom: 1px solid #eee; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    #error { color: #b00; }
+  </style>
+</head>
+<body>
+  <h1>Expenses</h1>
+  <form id="add">
+    <input id="amount" type="number" step="0.01" min="0.01" placeholder="Amount" required>
+    <input id="category" type="text" placeholder="Category" maxlength="50" required>
+    <input id="note" type="text" placeholder="Note (optional)" maxlength="200">
+    <input id="date" type="date" required>
+    <button type="submit">Add</button>
+  </form>
+  <p id="error"></p>
+  <h2>By category</h2>
+  <table><thead><tr><th>Category</th><th class="num">Count</th><th class="num">Total</th></tr></thead><tbody id="summary"></tbody></table>
+  <h2>All expenses</h2>
+  <table><thead><tr><th>Date</th><th>Category</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    $("date").valueAsDate = new Date();
+    async function api(path, opts = {}) {
+      const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+      if (!r.ok) throw new Error(r.status + " " + r.statusText);
+      return r.status === 204 ? null : r.json();
+    }
+    function show(e) { $("error").textContent = "Error: " + e.message; }
+    function cell(text, cls) { const td = document.createElement("td"); td.textContent = text; if (cls) td.className = cls; return td; }
+    async function load() {
+      try {
+        $("error").textContent = "";
+        const [items, sum] = await Promise.all([api("/api/expenses"), api("/api/summary")]);
+        $("rows").innerHTML = "";
+        for (const x of items) {
+          const tr = document.createElement("tr");
+          const del = document.createElement("button"); del.textContent = "Delete"; del.style.background = "#b00";
+          del.onclick = () => api("/api/expenses/" + x.id, { method: "DELETE" }).then(load).catch(show);
+          const tdD = document.createElement("td"); tdD.append(del);
+          tr.append(cell(x.spent_on), cell(x.category), cell(x.note), cell(Number(x.amount).toFixed(2), "num"), tdD);
+          $("rows").append(tr);
+        }
+        $("summary").innerHTML = "";
+        for (const c of sum.by_category) {
+          const tr = document.createElement("tr");
+          tr.append(cell(c.category), cell(c.count, "num"), cell(Number(c.total).toFixed(2), "num"));
+          $("summary").append(tr);
+        }
+        const tr = document.createElement("tr"); tr.style.fontWeight = "600";
+        tr.append(cell("Total"), cell(""), cell(Number(sum.total).toFixed(2), "num")); $("summary").append(tr);
+      } catch (e) { show(e); }
+    }
+    $("add").onsubmit = async (e) => {
+      e.preventDefault();
+      const body = { amount: $("amount").value, category: $("category").value, note: $("note").value, spent_on: $("date").value };
+      try { await api("/api/expenses", { method: "POST", body: JSON.stringify(body) }); $("amount").value = ""; $("note").value = ""; load(); } catch (x) { show(x); }
+    };
+    load();
+  </script>
+</body>
+</html>
