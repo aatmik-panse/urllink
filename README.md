@@ -108,7 +108,7 @@ kind delete cluster --name expenses
 One-time repository settings (owner):
 
 - **Settings > Environments > New environment `production`:** add yourself under *Required reviewers*. This enforces the manual approval.
-- **GHCR package visibility:** after the first push, open *Packages > expense-tracker > Package settings* and set it to **Public**, so the local kind cluster can pull `:<sha>` without a pull secret. Otherwise use `scripts/deploy.sh --build`.
+- **GHCR package visibility:** after the first push, open *Packages > urllink > Package settings* and set it to **Public**, so the local kind cluster can pull `:<sha>` without a pull secret. Otherwise use `scripts/deploy.sh --build`.
 
 ## Repository layout
 
