@@ -101,7 +101,7 @@ kind delete cluster --name expenses
 `.github/workflows/ci.yml` runs on every push and on pull requests to `main`:
 
 1. **quality:** ruff, pytest with coverage, pip-audit, hadolint, gitleaks (full history), trivy config, `helm lint` + `kubeconform` for every environment, `promtool check/test rules`.
-2. **build:** image tagged with the full commit SHA, trivy image scan (fails on fixable HIGH/CRITICAL), non-root and version self-check. On push events: multi-arch push to `ghcr.io/arjun-kshirsagar/expense-tracker:<sha>` with SBOM and provenance.
+2. **build:** image tagged with the full commit SHA, trivy image scan (fails on fixable HIGH/CRITICAL), non-root and version self-check. On push events: multi-arch push to `ghcr.io/aatmik-panse/urllink:<sha>` with SBOM and provenance.
 3. **deploy-test:** fresh kind cluster, kube-prometheus-stack, `scripts/deploy.sh` with the tested image, then helm test, smoke test, NetworkPolicy check, observability check, bad-release rollback, database fault and recovery (alert must fire and resolve), drift check. Uploads an evidence bundle and writes it to the run summary.
 4. **release:** on `main`, or manually (*Run workflow*, tick *release*). Uses the `production` environment, which requires reviewer approval, and promotes the same digest to `:release` without rebuilding.
 

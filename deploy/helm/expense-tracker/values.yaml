@@ -6,7 +6,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 image:
-  repository: ghcr.io/arjun-kshirsagar/expense-tracker
+  repository: ghcr.io/aatmik-panse/urllink
   # Always deploy an immutable git-SHA tag (set by CI / deploy script).
   # Empty falls back to .Chart.AppVersion.
   tag: ""
@@ -164,4 +164,4 @@ monitoring:
     # Latency: share of /api requests served within latencyThresholdSeconds.
     latencyTarget: 0.95
     latencyThresholdSeconds: 0.3
-  runbookBaseUrl: https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md
+  runbookBaseUrl: https://github.com/aatmik-panse/urllink/blob/main/docs/RUNBOOK.md

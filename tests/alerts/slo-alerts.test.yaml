@@ -44,7 +44,7 @@ tests:
             exp_annotations:
               summary: "Expenses API is burning its error budget fast"
               description: "50% of SLO-route requests are failing (5xx)."
-              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesapierrorbudgetfastburn"
+              runbook_url: "https://github.com/aatmik-panse/urllink/blob/main/docs/RUNBOOK.md#expensesapierrorbudgetfastburn"
 
   # 3. Database unreachable for 2 minutes: page fires.
   - interval: 30s
@@ -61,7 +61,7 @@ tests:
               severity: page
             exp_annotations:
               summary: "Expenses API pods cannot reach PostgreSQL (readiness failing)"
-              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesdatabaseunreachable"
+              runbook_url: "https://github.com/aatmik-panse/urllink/blob/main/docs/RUNBOOK.md#expensesdatabaseunreachable"
 
   # 4. No pod scraped: ExpensesApiDown fires after 2 minutes.
   - interval: 30s
@@ -76,7 +76,7 @@ tests:
               severity: page
             exp_annotations:
               summary: "No Expenses API pod is being scraped successfully"
-              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesapidown"
+              runbook_url: "https://github.com/aatmik-panse/urllink/blob/main/docs/RUNBOOK.md#expensesapidown"
 
   # 5. Slow responses: only ~50% under 300ms for 15 minutes.
   - interval: 30s
@@ -95,7 +95,7 @@ tests:
               severity: ticket
             exp_annotations:
               summary: "Fewer than 95% of SLO-route requests finish within 0.3s"
-              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesapilatencyslobreach"
+              runbook_url: "https://github.com/aatmik-panse/urllink/blob/main/docs/RUNBOOK.md#expensesapilatencyslobreach"
 
   # 6. No 5xx at all: the error ratio must be 0, not empty (otherwise the
   #    availability panel shows "No data" exactly when everything is fine).

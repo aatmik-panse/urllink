@@ -197,6 +197,7 @@ jobs:
     env:
       ENV_NAME: ci
       CLUSTER: expenses
+      IMAGE_REPO: ghcr.io/${{ github.repository }}   # must match env.IMAGE (env context is not allowed here)
     steps:
       - uses: actions/checkout@v5
         with:
