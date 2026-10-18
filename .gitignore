@@ -5,3 +5,9 @@ venv/
 *.db
 .env
 .pytest_cache/
+.coverage
+coverage.xml
+pytest.xml
+.ruff_cache/
+evidence/
+image.tar

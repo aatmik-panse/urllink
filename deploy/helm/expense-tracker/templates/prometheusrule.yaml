@@ -1,0 +1,106 @@
+{{- if include "expense-tracker.monitoringEnabled" . }}
+{{- $job := include "expense-tracker.fullname" . -}}
+{{- $ns := .Release.Namespace -}}
+{{- $sel := printf "job=\"%s\",namespace=\"%s\"" $job $ns -}}
+{{- $slo := .Values.monitoring.slo -}}
+{{- $api := printf "%s,route=~\"%s\"" $sel $slo.routeRegex -}}
+{{- $budget := subf 1.0 $slo.availabilityTarget -}}
+{{- $rb := .Values.monitoring.runbookBaseUrl -}}
+# SLIs are recorded once and reused by alerts and the dashboard.
+# Availability SLO: {{ $slo.availabilityTarget }} of SLO-route requests are not 5xx (error budget {{ $budget }}).
+# Latency SLO: {{ $slo.latencyTarget }} of SLO-route requests complete within {{ $slo.latencyThresholdSeconds }}s.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "expense-tracker.fullname" . }}-slo
+  labels:
+    {{- include "expense-tracker.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: expense-tracker.sli
+      interval: 30s
+      rules:
+        {{- range $w := list "5m" "30m" "1h" "6h" }}
+        - record: expenses:api_error_ratio:rate{{ $w }}
+          expr: |
+            # "or vector(0)": with no 5xx at all the series does not exist;
+            # the ratio must then be 0, not empty.
+            (sum(rate(http_requests_total{ {{- $api -}},status=~"5.."}[{{ $w }}])) or vector(0))
+            /
+            clamp_min(sum(rate(http_requests_total{ {{- $api -}} }[{{ $w }}])), 1e-9)
+        {{- end }}
+        - record: expenses:api_latency_good_ratio:rate5m
+          expr: |
+            sum(rate(http_request_duration_seconds_bucket{ {{- $api -}},le="{{ $slo.latencyThresholdSeconds }}"}[5m]))
+            /
+            clamp_min(sum(rate(http_request_duration_seconds_count{ {{- $api -}} }[5m])), 1e-9)
+        - record: expenses:api_request_rate:rate5m
+          expr: sum(rate(http_requests_total{ {{- $api -}} }[5m]))
+
+    - name: expense-tracker.alerts
+      rules:
+        # Multi-window burn-rate alerts (Google SRE workbook). A 14.4x burn
+        # spends 2% of a 30-day budget in 1h: page. A 6x burn spends 5% in
+        # 6h: open a ticket. The short window makes the alert resolve quickly
+        # once the problem is fixed.
+        - alert: ExpensesApiErrorBudgetFastBurn
+          expr: |
+            expenses:api_error_ratio:rate1h > (14.4 * {{ $budget }})
+            and
+            expenses:api_error_ratio:rate5m > (14.4 * {{ $budget }})
+            and
+            expenses:api_request_rate:rate5m > 0
+          for: 2m
+          labels:
+            severity: page
+          annotations:
+            summary: "Expenses API is burning its error budget fast"
+            description: "{{`{{ $value | humanizePercentage }}`}} of SLO-route requests are failing (5xx)."
+            runbook_url: "{{ $rb }}#expensesapierrorbudgetfastburn"
+        - alert: ExpensesApiErrorBudgetSlowBurn
+          expr: |
+            expenses:api_error_ratio:rate6h > (6 * {{ $budget }})
+            and
+            expenses:api_error_ratio:rate30m > (6 * {{ $budget }})
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "Expenses API error rate is steadily above its SLO"
+            runbook_url: "{{ $rb }}#expensesapierrorbudgetslowburn"
+        - alert: ExpensesApiLatencySLOBreach
+          expr: |
+            expenses:api_latency_good_ratio:rate5m < {{ $slo.latencyTarget }}
+            and
+            expenses:api_request_rate:rate5m > 0
+          for: 10m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "Fewer than {{ mulf $slo.latencyTarget 100 }}% of SLO-route requests finish within {{ $slo.latencyThresholdSeconds }}s"
+            runbook_url: "{{ $rb }}#expensesapilatencyslobreach"
+        - alert: ExpensesApiDown
+          expr: absent(up{ {{- $sel -}} } == 1)
+          for: 2m
+          labels:
+            severity: page
+          annotations:
+            summary: "No Expenses API pod is being scraped successfully"
+            runbook_url: "{{ $rb }}#expensesapidown"
+        - alert: ExpensesDatabaseUnreachable
+          expr: max(expenses_db_up{ {{- $sel -}} }) == 0
+          for: 1m
+          labels:
+            severity: page
+          annotations:
+            summary: "Expenses API pods cannot reach PostgreSQL (readiness failing)"
+            runbook_url: "{{ $rb }}#expensesdatabaseunreachable"
+        - alert: ExpensesPodRestartingOften
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="{{ $ns }}",pod=~"{{ $job }}-.*"}[15m]) > 2
+          labels:
+            severity: ticket
+          annotations:
+            summary: "{{`{{ $labels.pod }}`}} restarted more than twice in 15 minutes"
+            runbook_url: "{{ $rb }}#expensespodrestartingoften"
+{{- end }}

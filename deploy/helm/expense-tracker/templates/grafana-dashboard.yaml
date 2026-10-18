@@ -1,0 +1,14 @@
+{{- if and (include "expense-tracker.monitoringEnabled" .) .Values.monitoring.dashboard.enabled }}
+# Picked up by the kube-prometheus-stack Grafana sidecar (label grafana_dashboard).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "expense-tracker.fullname" . }}-dashboard
+  namespace: {{ .Values.monitoring.dashboard.namespace }}
+  labels:
+    {{- include "expense-tracker.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  expense-tracker.json: |-
+    {{- .Files.Get "files/dashboard.json" | replace "__NAMESPACE__" .Release.Namespace | replace "__ROUTES__" .Values.monitoring.slo.routeRegex | replace "__JOB__" (include "expense-tracker.fullname" .) | nindent 4 }}
+{{- end }}

@@ -1,0 +1,111 @@
+# promtool unit tests for the SLO alerts (run in CI: see .github/workflows/ci.yml).
+# They prove the alert logic fires on real failure patterns and stays quiet
+# when the service is healthy, before anything is deployed.
+rule_files:
+  - /tmp/expenses-rules.yaml
+evaluation_interval: 30s
+
+tests:
+  # 1. Healthy traffic: ~0.1% errors, nothing fires.
+  - interval: 30s
+    input_series:
+      - series: 'http_requests_total{job="expenses",namespace="expenses",route="/api/expenses",method="GET",status="200"}'
+        values: '0+999x240'
+      - series: 'http_requests_total{job="expenses",namespace="expenses",route="/api/expenses",method="GET",status="500"}'
+        values: '0+1x240'
+      - series: 'up{job="expenses",namespace="expenses",pod="expenses-a"}'
+        values: '1x240'
+      - series: 'expenses_db_up{job="expenses",namespace="expenses",pod="expenses-a"}'
+        values: '1x240'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ExpensesApiErrorBudgetFastBurn
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: ExpensesApiDown
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: ExpensesDatabaseUnreachable
+        exp_alerts: []
+
+  # 2. Half of requests fail for over an hour: fast-burn page fires.
+  - interval: 30s
+    input_series:
+      - series: 'http_requests_total{job="expenses",namespace="expenses",route="/api/expenses",method="GET",status="200"}'
+        values: '0+10x240'
+      - series: 'http_requests_total{job="expenses",namespace="expenses",route="/api/expenses",method="GET",status="503"}'
+        values: '0+10x240'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: ExpensesApiErrorBudgetFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: "Expenses API is burning its error budget fast"
+              description: "50% of SLO-route requests are failing (5xx)."
+              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesapierrorbudgetfastburn"
+
+  # 3. Database unreachable for 2 minutes: page fires.
+  - interval: 30s
+    input_series:
+      - series: 'expenses_db_up{job="expenses",namespace="expenses",pod="expenses-a"}'
+        values: '1 1 0 0 0 0 0 0'
+      - series: 'expenses_db_up{job="expenses",namespace="expenses",pod="expenses-b"}'
+        values: '1 1 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ExpensesDatabaseUnreachable
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: "Expenses API pods cannot reach PostgreSQL (readiness failing)"
+              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesdatabaseunreachable"
+
+  # 4. No pod scraped: ExpensesApiDown fires after 2 minutes.
+  - interval: 30s
+    input_series:
+      - series: 'up{job="expenses",namespace="expenses",pod="expenses-a"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ExpensesApiDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+            exp_annotations:
+              summary: "No Expenses API pod is being scraped successfully"
+              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesapidown"
+
+  # 5. Slow responses: only ~50% under 300ms for 15 minutes.
+  - interval: 30s
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{job="expenses",namespace="expenses",route="/api/expenses",method="GET",le="0.3"}'
+        values: '0+5x60'
+      - series: 'http_request_duration_seconds_count{job="expenses",namespace="expenses",route="/api/expenses",method="GET"}'
+        values: '0+10x60'
+      - series: 'http_requests_total{job="expenses",namespace="expenses",route="/api/expenses",method="GET",status="200"}'
+        values: '0+10x60'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: ExpensesApiLatencySLOBreach
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+            exp_annotations:
+              summary: "Fewer than 95% of SLO-route requests finish within 0.3s"
+              runbook_url: "https://github.com/arjun-kshirsagar/expense-tracker/blob/main/docs/RUNBOOK.md#expensesapilatencyslobreach"
+
+  # 6. No 5xx at all: the error ratio must be 0, not empty (otherwise the
+  #    availability panel shows "No data" exactly when everything is fine).
+  - interval: 30s
+    input_series:
+      - series: 'http_requests_total{job="expenses",namespace="expenses",route="/api/expenses",method="GET",status="200"}'
+        values: '0+10x20'
+    promql_expr_test:
+      - expr: expenses:api_error_ratio:rate5m
+        eval_time: 8m
+        exp_samples:
+          - labels: 'expenses:api_error_ratio:rate5m'
+            value: 0

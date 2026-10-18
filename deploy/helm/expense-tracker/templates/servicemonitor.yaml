@@ -1,0 +1,17 @@
+{{- if include "expense-tracker.monitoringEnabled" . }}
+# Tells the Prometheus Operator to scrape /metrics on every API pod.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "expense-tracker.fullname" . }}
+  labels:
+    {{- include "expense-tracker.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "expense-tracker.apiSelectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.scrapeInterval }}
+{{- end }}
