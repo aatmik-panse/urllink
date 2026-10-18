@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import Date, DateTime, Integer, Numeric, String
@@ -15,6 +15,4 @@ class Expense(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     note: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     spent_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

@@ -1,0 +1,64 @@
+# `helm test <release>`: exercises the real user path through the Service
+# (record -> summary totals correct -> delete) from inside the cluster.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "expense-tracker.fullname" . }}-test-journey
+  labels:
+    {{- include "expense-tracker.labels" . | nindent 4 }}
+    # Selected by the test-only egress NetworkPolicy below.
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: journey
+      image: "{{ .Values.image.repository }}:{{ include "expense-tracker.imageTag" . }}"
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      env:
+        - name: BASE
+          value: "http://{{ include "expense-tracker.fullname" . }}:{{ .Values.service.port }}"
+      command:
+        - python
+        - -c
+        - |
+          import json, os, urllib.request as u
+          base = os.environ["BASE"]
+          def call(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = u.Request(base + path, data=data, method=method,
+                              headers={"Content-Type": "application/json"})
+              with u.urlopen(req, timeout=5) as r:
+                  raw = r.read()
+                  return r.status, (json.loads(raw) if raw else None)
+          s, v = call("GET", "/version"); print("version", v); assert s == 200
+          day = "1998-06-15"
+          ids = []
+          for amount, cat in (("10.50", "helm-a"), ("4.50", "helm-a"), ("20", "helm-b")):
+              s, e = call("POST", "/api/expenses", {"amount": amount, "category": cat, "spent_on": day})
+              assert s == 201; ids.append(e["id"])
+          s, summ = call("GET", f"/api/summary?start={day}&end={day}")
+          assert summ["total"] == "35.00", summ
+          for i in ids:
+              s, _ = call("DELETE", f"/api/expenses/{i}"); assert s == 204
+          print("user journey OK")
